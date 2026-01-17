@@ -38,51 +38,80 @@
 
         <button type="submit" id="submit-btn">申請する</button>
     </form>
+<script>
+    const WEBHOOK_URL = 'ここにあなたのMakeのWebhookURL'; // ←ここが正しいか再確認！
 
-    <script>
-        const WEBHOOK_URL = https://hook.eu1.make.com/l0qj9xg8vvgh17dp99lr0j9pncxpz3kw;
-
-        async function main() {
-            await liff.init({ liffId: 2008912955-8G8aZdEv });
-            if (!liff.isLoggedIn()) { liff.login(); }
+    async function main() {
+        try {
+            await liff.init({ liffId: 'あなたのLIFF ID' });
+            if (!liff.isLoggedIn()) {
+                liff.login();
+            }
+        } catch (err) {
+            alert('LIFF初期化エラー: ' + err);
         }
-        main();
+    }
+    main();
 
-        document.getElementById('expense-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const btn = document.getElementById('submit-btn');
-            btn.disabled = true;
-            btn.innerText = '送信中...';
+    document.getElementById('expense-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = document.getElementById('submit-btn');
+        btn.disabled = true;
+        btn.innerText = '送信中...';
 
+        try {
+            // プロフィール取得の確認
             const profile = await liff.getProfile();
+            
             const fileInput = document.getElementById('receipt');
+            if (fileInput.files.length === 0) {
+                alert('画像を選択してください');
+                btn.disabled = false;
+                return;
+            }
             const file = fileInput.files[0];
 
-            // 画像をBase64に変換
             const reader = new FileReader();
             reader.readAsDataURL(file);
             reader.onload = async () => {
-                const data = {
-                    reporter_line_user_id: profile.userId,
-                    reporter_name: profile.displayName,
-                    used_date: document.getElementById('used_date').value,
-                    exp_code: document.getElementById('exp_code').value,
-                    store_name: document.getElementById('store_name').value,
-                    amount: document.getElementById('amount').value,
-                    image_data: reader.result.split(',')[1], // Base64の本体のみ
-                    image_name: file.name
-                };
+                try {
+                    const data = {
+                        reporter_line_user_id: profile.userId,
+                        reporter_name: profile.displayName,
+                        used_date: document.getElementById('used_date').value,
+                        exp_code: document.getElementById('exp_code').value,
+                        store_name: document.getElementById('store_name').value,
+                        amount: document.getElementById('amount').value,
+                        image_data: reader.result.split(',')[1],
+                        image_name: file.name
+                    };
 
-                await fetch(WEBHOOK_URL, {
-                    method: 'POST',
-                    body: JSON.stringify(data),
-                    headers: { 'Content-Type': 'application/json' }
-                });
+                    // 送信直前にアラートを出す（ここまでは動いている確認）
+                    console.log('Sending data to Make...');
 
-                alert('申請が完了しました！');
-                liff.closeWindow();
+                    const response = await fetch(WEBHOOK_URL, {
+                        method: 'POST',
+                        body: JSON.stringify(data),
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+
+                    if (response.ok) {
+                        alert('申請が完了しました！');
+                        liff.closeWindow();
+                    } else {
+                        alert('Makeサーバーエラー: ' + response.status);
+                        btn.disabled = false;
+                    }
+                } catch (sendErr) {
+                    alert('送信プロセスエラー: ' + sendErr);
+                    btn.disabled = false;
+                }
             };
-        });
-    </script>
+        } catch (err) {
+            alert('入力データ取得エラー: ' + err);
+            btn.disabled = false;
+        }
+    });
+</script>
 </body>
 </html>
