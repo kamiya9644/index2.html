@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>経費精算申請</title>
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background: #f4f7f6; }
+        label { display: block; margin-top: 10px; font-weight: bold; }
+        input, select, textarea { width: 100%; padding: 10px; margin-top: 5px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+        button { width: 100%; padding: 15px; background: #00b900; color: white; border: none; border-radius: 4px; margin-top: 20px; font-size: 16px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h2>経費精算申請</h2>
+    <form id="expense-form">
+        <label>利用日</label>
+        <input type="date" id="used_date" required>
+
+        <label>品目</label>
+        <select id="exp_code" required>
+            <option value="gas">ガソリン</option>
+            <option value="cons">消耗品</option>
+            <option value="highw">高速</option>
+            <option value="enterm">接待交際費</option>
+            <option value="other">その他</option>
+        </select>
+
+        <label>店名</label>
+        <input type="text" id="store_name" placeholder="コンビニ、レストラン名など">
+
+        <label>金額</label>
+        <input type="number" id="amount" required placeholder="半角数字で入力">
+
+        <label>レシート画像</label>
+        <input type="file" id="receipt" accept="image/*" required>
+
+        <button type="submit" id="submit-btn">申請する</button>
+    </form>
+
+    <script>
+        const WEBHOOK_URL = https://hook.eu1.make.com/l0qj9xg8vvgh17dp99lr0j9pncxpz3kw;
+
+        async function main() {
+            await liff.init({ liffId: 2008912955-8G8aZdEv });
+            if (!liff.isLoggedIn()) { liff.login(); }
+        }
+        main();
+
+        document.getElementById('expense-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('submit-btn');
+            btn.disabled = true;
+            btn.innerText = '送信中...';
+
+            const profile = await liff.getProfile();
+            const fileInput = document.getElementById('receipt');
+            const file = fileInput.files[0];
+
+            // 画像をBase64に変換
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = async () => {
+                const data = {
+                    reporter_line_user_id: profile.userId,
+                    reporter_name: profile.displayName,
+                    used_date: document.getElementById('used_date').value,
+                    exp_code: document.getElementById('exp_code').value,
+                    store_name: document.getElementById('store_name').value,
+                    amount: document.getElementById('amount').value,
+                    image_data: reader.result.split(',')[1], // Base64の本体のみ
+                    image_name: file.name
+                };
+
+                await fetch(WEBHOOK_URL, {
+                    method: 'POST',
+                    body: JSON.stringify(data),
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                alert('申請が完了しました！');
+                liff.closeWindow();
+            };
+        });
+    </script>
+</body>
+</html>
