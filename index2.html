@@ -8,11 +8,11 @@
     <style>
         body { font-family: sans-serif; padding: 20px; background: #f4f7f6; color: #333; }
         label { display: block; margin-top: 15px; font-weight: bold; font-size: 14px; }
-        input, select { width: 100%; padding: 12px; margin-top: 5px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; }
+        input, select, textarea { width: 100%; padding: 12px; margin-top: 5px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; }
+        textarea { height: 80px; resize: vertical; }
         button { width: 100%; padding: 15px; background: #00b900; color: white; border: none; border-radius: 6px; margin-top: 25px; font-size: 18px; font-weight: bold; cursor: pointer; }
         button:disabled { background: #ccc; }
-        /* その他入力欄のスタイル設定 */
-        #other_input_container { display: none; background: #fff; padding: 10px; border-radius: 6px; border: 1px dashed #00b900; margin-top: 10px; }
+        .dynamic-field { display: none; background: #fff; padding: 10px; border-radius: 6px; border: 1px dashed #00b900; margin-top: 10px; }
     </style>
 </head>
 <body>
@@ -22,7 +22,7 @@
         <input type="date" id="used_date" required>
 
         <label>品目</label>
-        <select id="exp_code" onchange="toggleOtherInput()" required>
+        <select id="exp_code" onchange="handleFieldChange()" required>
             <option value="gas">ガソリン</option>
             <option value="cons">消耗品</option>
             <option value="highw">高速</option>
@@ -30,13 +30,25 @@
             <option value="other">その他</option>
         </select>
 
-        <div id="other_input_container">
-            <label style="color: #00b900;">具体的な内容（その他）</label>
-            <input type="text" id="other_text" placeholder="例：備品修理代、駐車場代など">
+        <div id="field_gas" class="dynamic-field">
+            <label style="color: #00b900;">給油リッター数 (L)</label>
+            <input type="number" id="gas_liters" step="0.01" placeholder="例: 35.5">
+        </div>
+
+        <div id="field_highway" class="dynamic-field">
+            <label style="color: #00b900;">乗り口</label>
+            <input type="text" id="highw_in" placeholder="例: 岐阜各務原IC">
+            <label style="color: #00b900;">降り口</label>
+            <input type="text" id="highw_out" placeholder="例: 一宮IC">
+        </div>
+
+        <div id="field_details" class="dynamic-field">
+            <label id="details_label" style="color: #00b900;">詳細内容</label>
+            <textarea id="details_text" placeholder="複数ある場合は改行して入力してください"></textarea>
         </div>
 
         <label>店名・内容</label>
-        <input type="text" id="store_name" placeholder="例：〇〇コンビニ" required>
+        <input type="text" id="store_name" placeholder="例：〇〇石油、〇〇商事" required>
 
         <label>金額 (円)</label>
         <input type="number" id="amount" placeholder="半角数字で入力" required>
@@ -48,51 +60,51 @@
     </form>
 
     <script>
-        // --- 設定項目 ---
         const LIFF_ID = '2008912955-8G8aZdEv'; 
         const WEBHOOK_URL = 'https://hook.eu1.make.com/l0qj9xg8vvgh17dp99lr0j9pncxpz3kw'; 
 
-        // 1. 品目の表示切り替え（その他の場合のみ入力可）
-        function toggleOtherInput() {
+        function handleFieldChange() {
             const expCode = document.getElementById('exp_code').value;
-            const container = document.getElementById('other_input_container');
-            const otherText = document.getElementById('other_text');
+            
+            // 全ての動的フィールドを一旦リセット
+            const fields = document.querySelectorAll('.dynamic-field');
+            fields.forEach(f => f.style.display = 'none');
+            const inputs = document.querySelectorAll('.dynamic-field input, .dynamic-field textarea');
+            inputs.forEach(i => { i.required = false; });
 
-            if (expCode === 'other') {
-                container.style.display = 'block';
-                otherText.required = true;
-            } else {
-                container.style.display = 'none';
-                otherText.required = false;
-                otherText.value = '';
+            if (expCode === 'gas') {
+                document.getElementById('field_gas').style.display = 'block';
+                document.getElementById('gas_liters').required = true;
+            } else if (expCode === 'highw') {
+                document.getElementById('field_highway').style.display = 'block';
+                document.getElementById('highw_in').required = true;
+                document.getElementById('highw_out').required = true;
+            } else if (['cons', 'enterm', 'other'].includes(expCode)) {
+                document.getElementById('field_details').style.display = 'block';
+                document.getElementById('details_text').required = true;
+                
+                // ラベル名を動的に変更
+                const labels = { 'cons': '消耗品の内訳', 'enterm': '接待の目的・同席者', 'other': '具体的な内容' };
+                document.getElementById('details_label').innerText = labels[expCode];
             }
         }
 
-        // 2. LIFF初期化
+        // 初期実行（ガソリンが初期選択なので）
+        handleFieldChange();
+
         async function initLiff() {
             try {
                 await liff.init({ liffId: LIFF_ID });
-                if (!liff.isLoggedIn()) {
-                    liff.login();
-                }
-            } catch (err) {
-                console.error(err);
-                alert('LIFFの起動に失敗しました。');
-            }
+                if (!liff.isLoggedIn()) liff.login();
+            } catch (err) { alert('LIFFの起動に失敗しました'); }
         }
         initLiff();
 
-        // 3. 送信処理
         document.getElementById('expense-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const btn = document.getElementById('submit-btn');
             const fileInput = document.getElementById('receipt');
-
-            // ファイルが選択されているか最終確認
-            if (!fileInput.files || fileInput.files.length === 0) {
-                alert('レシート画像を選択してください。');
-                return;
-            }
+            if (!fileInput.files || fileInput.files.length === 0) return alert('画像を選択してください');
 
             btn.disabled = true;
             btn.innerText = '送信中...';
@@ -102,45 +114,41 @@
                 const file = fileInput.files[0];
                 const reader = new FileReader();
 
-                // ファイル読み込み完了時の処理
                 reader.onload = async () => {
-                    try {
-                        const payload = {
-                            reporter_line_user_id: profile.userId,
-                            reporter_name: profile.displayName,
-                            used_date: document.getElementById('used_date').value,
-                            exp_code: document.getElementById('exp_code').value,
-                            other_details: document.getElementById('other_text').value,
-                            store_name: document.getElementById('store_name').value,
-                            amount: Number(document.getElementById('amount').value),
-                            image_data: reader.result.split(',')[1],
-                            image_name: file.name
-                        };
+                    const payload = {
+                        reporter_line_user_id: profile.userId,
+                        reporter_name: profile.displayName,
+                        used_date: document.getElementById('used_date').value,
+                        exp_code: document.getElementById('exp_code').value,
+                        // 全ての拡張項目を送信（空なら空で送る）
+                        gas_liters: document.getElementById('gas_liters').value,
+                        highw_in: document.getElementById('highw_in').value,
+                        highw_out: document.getElementById('highw_out').value,
+                        details_text: document.getElementById('details_text').value,
+                        store_name: document.getElementById('store_name').value,
+                        amount: Number(document.getElementById('amount').value),
+                        image_data: reader.result.split(',')[1],
+                        image_name: file.name
+                    };
 
-                        const response = await fetch(WEBHOOK_URL, {
-                            method: 'POST',
-                            body: JSON.stringify(payload),
-                            headers: { 'Content-Type': 'application/json' }
-                        });
+                    const response = await fetch(WEBHOOK_URL, {
+                        method: 'POST',
+                        body: JSON.stringify(payload),
+                        headers: { 'Content-Type': 'application/json' }
+                    });
 
-                        if (response.ok) {
-                            alert('申請が完了しました！');
-                            liff.closeWindow();
-                        } else {
-                            throw new Error('サーバーエラーが発生しました。');
-                        }
-                    } catch (fetchErr) {
-                        alert('送信に失敗しました: ' + fetchErr.message);
+                    if (response.ok) {
+                        alert('申請が完了しました！');
+                        liff.closeWindow();
+                    } else {
+                        alert('サーバーエラー');
                         btn.disabled = false;
                         btn.innerText = '申請を送信する';
                     }
                 };
-
-                // ファイル読み込み開始
                 reader.readAsDataURL(file);
-
             } catch (err) {
-                alert('エラーが発生しました: ' + err.message);
+                alert('エラー: ' + err.message);
                 btn.disabled = false;
                 btn.innerText = '申請を送信する';
             }
