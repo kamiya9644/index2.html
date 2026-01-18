@@ -11,6 +11,8 @@
         input, select { width: 100%; padding: 12px; margin-top: 5px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; }
         button { width: 100%; padding: 15px; background: #00b900; color: white; border: none; border-radius: 6px; margin-top: 25px; font-size: 18px; font-weight: bold; cursor: pointer; }
         button:disabled { background: #ccc; }
+        /* その他入力欄のスタイル */
+        #other_input_container { display: none; background: #fff; padding: 10px; border-radius: 6px; border: 1px dashed #00b900; margin-top: 10px; }
     </style>
 </head>
 <body>
@@ -20,13 +22,18 @@
         <input type="date" id="used_date" required>
 
         <label>品目</label>
-        <select id="exp_code" required>
+        <select id="exp_code" onchange="toggleOtherInput()" required>
             <option value="gas">ガソリン</option>
             <option value="cons">消耗品</option>
             <option value="highw">高速</option>
             <option value="enterm">接待交際費</option>
             <option value="other">その他</option>
         </select>
+
+        <div id="other_input_container">
+            <label style="color: #00b900;">具体的な内容（その他）</label>
+            <input type="text" id="other_text" placeholder="例：備品修理代、駐車場代など">
+        </div>
 
         <label>店名・内容</label>
         <input type="text" id="store_name" placeholder="例：〇〇コンビニ" required>
@@ -35,79 +42,3 @@
         <input type="number" id="amount" placeholder="半角数字で入力" required>
 
         <label>レシート撮影</label>
-        <input type="file" id="receipt" accept="image/*" required>
-
-        <button type="submit" id="submit-btn">申請を送信する</button>
-    </form>
-
-    <script>
-        // --- 設定項目 ---
-        const LIFF_ID = '2008912955-8G8aZdEv'; 
-        const WEBHOOK_URL = 'https://hook.eu1.make.com/l0qj9xg8vvgh17dp99lr0j9pncxpz3kw'; 
-
-        // LIFF初期化
-        async function initLiff() {
-            try {
-                await liff.init({ liffId: LIFF_ID });
-                if (!liff.isLoggedIn()) {
-                    liff.login();
-                }
-            } catch (err) {
-                alert('LIFFの起動に失敗しました: ' + err);
-            }
-        }
-        initLiff();
-
-        // 送信処理
-        document.getElementById('expense-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const btn = document.getElementById('submit-btn');
-            
-            // 二重送信防止
-            btn.disabled = true;
-            btn.innerText = '送信中...';
-
-            try {
-                const profile = await liff.getProfile();
-                const fileInput = document.getElementById('receipt');
-                const file = fileInput.files[0];
-
-                const reader = new FileReader();
-                reader.readAsDataURL(file);
-                reader.onload = async () => {
-                    const payload = {
-                        reporter_line_user_id: profile.userId,
-                        reporter_name: profile.displayName,
-                        used_date: document.getElementById('used_date').value,
-                        exp_code: document.getElementById('exp_code').value,
-                        store_name: document.getElementById('store_name').value,
-                        amount: Number(document.getElementById('amount').value),
-                        image_data: reader.result.split(',')[1],
-                        image_name: file.name
-                    };
-
-                    // Makeにデータを送信
-                    const response = await fetch(WEBHOOK_URL, {
-                        method: 'POST',
-                        body: JSON.stringify(payload),
-                        headers: { 'Content-Type': 'application/json' }
-                    });
-
-                    if (response.ok) {
-                        alert('申請が完了しました！');
-                        liff.closeWindow(); // LINE画面を閉じる
-                    } else {
-                        alert('送信失敗（サーバーエラー）');
-                        btn.disabled = false;
-                        btn.innerText = '申請を送信する';
-                    }
-                };
-            } catch (err) {
-                alert('エラーが発生しました: ' + err);
-                btn.disabled = false;
-                btn.innerText = '申請を送信する';
-            }
-        });
-    </script>
-</body>
-</html>
