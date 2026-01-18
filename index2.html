@@ -11,7 +11,7 @@
         input, select { width: 100%; padding: 12px; margin-top: 5px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; }
         button { width: 100%; padding: 15px; background: #00b900; color: white; border: none; border-radius: 6px; margin-top: 25px; font-size: 18px; font-weight: bold; cursor: pointer; }
         button:disabled { background: #ccc; }
-        /* その他入力欄のスタイル */
+        /* その他入力欄のスタイル設定 */
         #other_input_container { display: none; background: #fff; padding: 10px; border-radius: 6px; border: 1px dashed #00b900; margin-top: 10px; }
     </style>
 </head>
@@ -42,3 +42,109 @@
         <input type="number" id="amount" placeholder="半角数字で入力" required>
 
         <label>レシート撮影</label>
+        <input type="file" id="receipt" accept="image/*" required>
+
+        <button type="submit" id="submit-btn">申請を送信する</button>
+    </form>
+
+    <script>
+        // --- 設定項目 ---
+        const LIFF_ID = '2008912955-8G8aZdEv'; 
+        const WEBHOOK_URL = 'https://hook.eu1.make.com/l0qj9xg8vvgh17dp99lr0j9pncxpz3kw'; 
+
+        // 1. 品目の表示切り替え（その他の場合のみ入力可）
+        function toggleOtherInput() {
+            const expCode = document.getElementById('exp_code').value;
+            const container = document.getElementById('other_input_container');
+            const otherText = document.getElementById('other_text');
+
+            if (expCode === 'other') {
+                container.style.display = 'block';
+                otherText.required = true;
+            } else {
+                container.style.display = 'none';
+                otherText.required = false;
+                otherText.value = '';
+            }
+        }
+
+        // 2. LIFF初期化
+        async function initLiff() {
+            try {
+                await liff.init({ liffId: LIFF_ID });
+                if (!liff.isLoggedIn()) {
+                    liff.login();
+                }
+            } catch (err) {
+                console.error(err);
+                alert('LIFFの起動に失敗しました。');
+            }
+        }
+        initLiff();
+
+        // 3. 送信処理
+        document.getElementById('expense-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('submit-btn');
+            const fileInput = document.getElementById('receipt');
+
+            // ファイルが選択されているか最終確認
+            if (!fileInput.files || fileInput.files.length === 0) {
+                alert('レシート画像を選択してください。');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerText = '送信中...';
+
+            try {
+                const profile = await liff.getProfile();
+                const file = fileInput.files[0];
+                const reader = new FileReader();
+
+                // ファイル読み込み完了時の処理
+                reader.onload = async () => {
+                    try {
+                        const payload = {
+                            reporter_line_user_id: profile.userId,
+                            reporter_name: profile.displayName,
+                            used_date: document.getElementById('used_date').value,
+                            exp_code: document.getElementById('exp_code').value,
+                            other_details: document.getElementById('other_text').value,
+                            store_name: document.getElementById('store_name').value,
+                            amount: Number(document.getElementById('amount').value),
+                            image_data: reader.result.split(',')[1],
+                            image_name: file.name
+                        };
+
+                        const response = await fetch(WEBHOOK_URL, {
+                            method: 'POST',
+                            body: JSON.stringify(payload),
+                            headers: { 'Content-Type': 'application/json' }
+                        });
+
+                        if (response.ok) {
+                            alert('申請が完了しました！');
+                            liff.closeWindow();
+                        } else {
+                            throw new Error('サーバーエラーが発生しました。');
+                        }
+                    } catch (fetchErr) {
+                        alert('送信に失敗しました: ' + fetchErr.message);
+                        btn.disabled = false;
+                        btn.innerText = '申請を送信する';
+                    }
+                };
+
+                // ファイル読み込み開始
+                reader.readAsDataURL(file);
+
+            } catch (err) {
+                alert('エラーが発生しました: ' + err.message);
+                btn.disabled = false;
+                btn.innerText = '申請を送信する';
+            }
+        });
+    </script>
+</body>
+</html>
